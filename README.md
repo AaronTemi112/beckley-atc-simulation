@@ -16,10 +16,10 @@ A browser-based **air traffic control (ATC) simulation** system built using **Fl
 
 ## Tools Used
 
-- **Python 3**
+- **Python**
 - **Flask** (for the backend API and routing)
-- **JavaScript** with **Leaflet.js** (for interactive mapping)
-- **HTML5/CSS3** (frontend UI)
+- **JavaScript** and **Leaflet.js** (for interactive mapping)
+- **HTML and CSS** (frontend UI)
 
 ---
 
