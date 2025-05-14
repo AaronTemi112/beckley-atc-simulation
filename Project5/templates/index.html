@@ -1,0 +1,190 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>Beckley ATC Radar</title> <!-- Page title shown in browser tab -->
+    <meta charset="utf-8" /> <!-- makes sure the proper character is encoded-->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- responsive design for mobile devices --> 
+
+    <!-- Leaflet CSS & JS for the map rendering -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" /> 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script> <!-- load Leaflet JS -->
+
+    <style> /* Styling for the entire page and map container*/
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            background-color: #111; 
+        }
+
+        #map {
+            height: 100%; /*Full height map display*/
+        }
+
+        .leaflet-popup-content {
+            font-size: 14px; /* the slightly smaller font for the pop up info*/
+        }
+        /* panel styling for the aircraft controls*/
+        #controls {
+            position: absolute; /*so it floats above the map*/
+            top: 120px; /*below the zoom controls so there is no obstruction*/
+            left: 10px;
+            z-index: 1000; /*keeps it at the top*/
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body> <!-- Aircraft selection dropdown and control buttons-->
+    <div id="controls"> <!-- Dropdown for selecting the aircraft and issuing commands-->
+        drop down for aircraft
+        <label for="planeSelect">Select Aircraft:</label><br>
+        <select id="planeSelect"></select><br><br> <!--dynamically filled with the aircraft-->
+        <button onclick="sendCommand('taxi')">Taxi</button>
+        <button onclick="sendCommand('takeoff')">Force Takeoff</button>
+        <button onclick="sendCommand('land')">Force Landing</button>
+    </div>
+    <!-- weather condition display-->
+    <div id="weatherInfo" style="position:absolute; bottom:10px; left:10px; z-index:1000; background:white; padding:8px; font-size:13px; border-radius:6px;">
+        <!--normal styling for the box-->
+        <b>Weather:</b> <span id="weatherCondition">Loading..</span><br>
+        <b>Caution Level is:</b> <span id="cautionLevel"></span> <!-- the info is populated dynamically based on caution level raised from the back end (Flask)-->
+    </div>
+
+    <div id="map"></div>
+    <!--right-side panel to log the status of aircraft-->
+    <div id="logPanel" style="position:absolute; top:10px; right:10px; z-index:1000; background:white; padding:10px; width:220px; height:300px; overflow-y:auto; font-family:monospace; font-size:13px; border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.3);">
+        <b>Traffic Log</b>
+        <div id="logContent"></div> <!--populates the panel dynamically-->
+    </div>
+
+    <div id="map"></div>
+
+    <script> // Initialise Leaflet map and set the view to a specific location (Beckley Airport)
+        const map = L.map('map').setView([51.8000, -1.2000], 12);
+        // Adding a map tile layer from OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18,
+        }).addTo(map);
+
+        map.zoomControl.setPosition('topleft'); // Moved the zoom controls to the top left to avoid overlapping
+
+        let aircraftMarkers = {}; // stored the aircraft and route markers so they can be updated or removed easily
+        // get aircraft data and weather info every 3 seconds
+        async function fetchAndUpdateAircraft() {
+            const res = await fetch("/hzia"); // call backend for JSON data
+            const result = await res.json(); //parse JSON data
+            const data = result.aircraft; // aircraft data
+            const weather = result.weather; // weather data/object
+            // updating the weather text 
+            document.getElementById("weatherCondition").textContent = weather.condition.toUpperCase();
+            document.getElementById("cautionLevel").textContent = weather.caution_level.toUpperCase();
+
+            const levelColor = { //caution level colour coding
+                low: "green",
+                moderate: "orange",
+                high: "red"
+            };
+            document.getElementById("cautionLevel").style.color = levelColor[weather.caution_level] || "black";
+
+            drawAircraft(data); //draw the map markers
+            populatePlaneDropdown(data); //update the aircraft selector
+            updateTrafficLog(data); //update the traffic log
+        }
+
+        function drawAircraft(data) {
+            for (let key in aircraftMarkers) {
+                map.removeLayer(aircraftMarkers[key]); // thi removes the previous markers  
+            }
+            aircraftMarkers = {}; // reset the marker state
+
+            data.forEach(plane => {
+                if (!plane.lat || !plane.lon) return;
+
+                let color = "lime"; // the default colour of the aircraft markers (why the new one was immediately green)
+                if (plane.type === "DRONE1") color = "orange";
+                else if (plane.type === "Boeing 737") color = "dodgerblue";
+                else if (plane.type === "MILJET") color = "red";
+                if (plane.conflict) color = "crimson"; // will highlight if a conflict is detected
+
+                const marker = L.circleMarker([plane.lat, plane.lon], {
+                    radius: 6,
+                    color: color,
+                    fillColor: color,
+                    fillOpacity: 0.9
+                }).addTo(map);
+
+                let warning = plane.conflict ? "<br/><span style='color:red'> Conflict detected</span>" : "";
+
+                marker.bindPopup(`
+                <b>${plane.call_sign}</b><br/>
+                Type: ${plane.type}<br/>
+                Status: ${plane.status}<br/>
+                Alt: ${plane.altitude?.toFixed(0)} ft<br/>
+                Nearest A/C: ${plane.nearest_distance_km} km
+                ${warning}
+            `);
+
+                aircraftMarkers[plane.call_sign] = marker;
+
+                if (plane.route && plane.route.length > 0) { //draw a path if there is one
+                    const path = [[plane.lat, plane.lon], ...plane.route];
+
+                    const polyline = L.polyline(path, {
+                        color: "black",
+                        weight: 2,
+                        opacity: 0.5,
+                        dashArray: "5, 5"
+                    }).addTo(map);
+
+                    aircraftMarkers[plane.call_sign + "_route"] = polyline;
+                }
+            });
+        }
+        
+        function updateTrafficLog(data) { //update the traffic log with all the lastest data
+            const logBox = document.getElementById("logContent");
+            logBox.innerHTML = "";
+
+            data.forEach(plane => {
+                const row = document.createElement("div");
+                row.innerHTML = `<span style="color:gray;">${plane.call_sign}</span> – ${plane.status.toUpperCase()} – ${plane.altitude.toFixed(0)} ft - ${plane.nearest_distance_km} km`;
+                if (plane.conflict) {
+                    row.innerHTML += ` <span style="color:red;"> ! </span>`;
+                }
+                logBox.appendChild(row);
+            });
+        }
+        // populate the dropdown with the aircraft call signs and the current status
+        function populatePlaneDropdown(data) {
+            const select = document.getElementById("planeSelect");
+            select.innerHTML = "";
+            data.forEach(plane => {
+                const opt = document.createElement("option");
+                opt.value = plane.call_sign;
+                opt.textContent = `[${plane.status}] ${plane.call_sign}`;
+                select.appendChild(opt);
+            });
+        }
+        // to send user-issued commands (taxi, takeoff, force land) all to the back end
+        async function sendCommand(cmd) { 
+            const callSign = document.getElementById("planeSelect").value;
+            if (!callSign) return;
+            try {
+                const res = await fetch(`/command/${callSign}/${cmd}`);
+                if (!res.ok) {
+                    const err = await res.json();
+                    alert(err.error || "Command failed.");
+                }
+            } catch (e) {
+                alert("Could not send command.");
+            }
+        }
+
+        fetchAndUpdateAircraft();
+        setInterval(fetchAndUpdateAircraft, 3000); //polling every 3 seconds
+    </script>
+</body>
+</html>
