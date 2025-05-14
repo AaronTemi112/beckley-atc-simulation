@@ -9,20 +9,17 @@ A browser-based **air traffic control (ATC) simulation** system built using **Fl
 - Aircraft control panel with **Taxi**, **Force Takeoff**, and **Force Landing** buttons.
 - Real-time **aircraft simulation** with animated movement, altitude changes, and routing.
 - Automatic **conflict detection** based on distance and altitude thresholds.
-- Randomized **weather generation** that affects caution levels.
-- Aircraft data visualized on an interactive **Leaflet.js map**.
-- Color-coded markers for different aircraft types and statuses.
 - Traffic log panel showing aircraft info and nearest aircraft distance.
 - Modular architecture separating **backend simulation logic** and **frontend UI**.
 
 ---
 
-## 🖥️ Technologies Used
+## Tools Used
 
 - **Python 3**
 - **Flask** (for the backend API and routing)
 - **JavaScript** with **Leaflet.js** (for interactive mapping)
-- **HTML5/CSS3** (frontend UI and styling)
+- **HTML5/CSS3** (frontend UI)
 
 ---
 
