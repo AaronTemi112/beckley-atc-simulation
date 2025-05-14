@@ -23,7 +23,7 @@ A browser-based **air traffic control (ATC) simulation** system built using **Fl
 
 ---
 
-## 🚀 Installation Instructions
+## For Installation
 
 1. **Clone the repository**:
    ```bash
